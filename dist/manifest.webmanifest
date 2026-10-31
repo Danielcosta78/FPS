@@ -3,7 +3,7 @@
  "name": "Riposte: Frontline",
  "short_name": "Riposte",
  "description": "FPS en ligne dans le navigateur : solo contre des bots ou en ligne entre amis.",
- "start_url": "./",
+ "start_url": "/dist/riposte-frontline.html",
  "scope": "./",
  "display": "fullscreen",
  "display_override": [
