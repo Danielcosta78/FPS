@@ -6,7 +6,7 @@ const fs = require('fs'), path = require('path'), { execFileSync } = require('ch
 const acorn = require('acorn');
 const REPO = path.resolve(__dirname, '../..');
 
-const filtre = fs.readFileSync(path.join(REPO, 'api/_lib/filtre.js'), 'utf8').replace(/^export /gm, '');
+const filtre = fs.readFileSync(path.join(REPO, 'lib/filtre.js'), 'utf8').replace(/^export /gm, '');
 const files = fs.readdirSync(path.join(REPO, 'src')).filter((f) => f.endsWith('.js')).sort();
 const src = filtre + '\n' + files.map((f) => fs.readFileSync(path.join(REPO, 'src', f), 'utf8')).join('\n');
 const min = execFileSync('python3', ['-c', 'import sys;sys.path.insert(0,"tools");import minif;sys.stdout.write(minif.js(sys.stdin.read()))'],
