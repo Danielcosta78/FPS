@@ -1,9 +1,9 @@
 """Signale les déclarations de premier niveau (const, let, class, function) en double dans src/ : tous les
 modules sont concaténés dans un seul script, une seconde déclaration casserait le chargement ou en remplacerait une autre.
-api/_lib/filtre.js y est joint aussi (build.py le met dans le jeu, sans ses « export »)."""
+lib/filtre.js y est joint aussi (build.py le met dans le jeu, sans ses « export »)."""
 import re, glob, collections, sys
 names = collections.defaultdict(list)
-for f in sorted(glob.glob('src/*.js')) + ['api/_lib/filtre.js']:
+for f in sorted(glob.glob('src/*.js')) + ['lib/filtre.js']:
     for i, l in enumerate(open(f, encoding='utf-8')):
         l = re.sub(r'^export ', '', l)
         m = re.match(r'^(?:const|let|var)\s+(.*)', l)
