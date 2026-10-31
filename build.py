@@ -22,7 +22,7 @@ if not relay: # PeerJS : connexions WebRTC entre joueurs (voir src/09c-net.js) ;
     tags+='\n<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js" integrity="sha384-x0YgkOr/3UOZP2CRDxGW9e0Q+2Qjyr3uJrm4xU32Y7ZCNAo7Cc7bjhrZMi/dwczu" crossorigin="anonymous"></script>'
 js="\n".join(open(f,encoding="utf-8").read() for f in sorted(glob.glob("src/*.js")))
 # Filtre des mots (noms, discussion) : le même fichier sert au serveur des comptes (module) ; joint au jeu sans ses « export »
-js=re.sub(r"^export ","",open("api/_lib/filtre.js",encoding="utf-8").read(),flags=re.M)+"\n"+js
+js=re.sub(r"^export ","",open("lib/filtre.js",encoding="utf-8").read(),flags=re.M)+"\n"+js
 def data_uri(path):
     return "data:image/"+("png" if path.endswith(".png") else "webp")+";base64,"+base64.b64encode(open(path,"rb").read()).decode("ascii")
 # Textures photo CC0 (assets/tex/<surface>/map, normal, rough .webp, produites par tools/build_assets.py) : elles ne sont
