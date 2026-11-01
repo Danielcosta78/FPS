@@ -1,0 +1,27 @@
+# Textes des comptes par e-mail (src/09ja-firebase.js et écran de connexion), traduction anglaise : « texte français ⇒ traduction ».
+# Même format que en.txt : build.py et tools/dev/check_i18n.py lisent tous les fichiers i18n/en*.txt.
+
+Cette fonction n'est pas encore disponible. ⇒ This feature is not available yet.
+Un e-mail et un mot de passe suffisent. L'e-mail reste privé et sert à retrouver votre mot de passe. Les autres joueurs connectés voient votre nom d'utilisateur, votre nom d'affichage, votre niveau, vos statistiques et votre photo. Évitez d'y mettre votre vrai nom. ⇒ An email and a password are all you need. Your email stays private and is used to recover your password. Other signed-in players see your username, display name, level, statistics and picture. Avoid putting your real name there.
+E-mail ⇒ Email
+Entrez l'e-mail de votre compte. Vous recevrez un message avec un lien pour choisir un nouveau mot de passe. ⇒ Enter the email of your account. You will get a message with a link to choose a new password.
+Envoyer le lien ⇒ Send the link
+Si un compte existe avec cet e-mail, un message avec un lien vient d'être envoyé. Pensez à regarder dans les courriers indésirables. ⇒ If an account exists with this email, a message with a link has just been sent. Remember to check your spam folder.
+Le nom d'utilisateur est votre identifiant public : 3 à 16 caractères (lettres sans accent, chiffres, tiret bas), définitif. Votre nom d'affichage sera le même, et vous pourrez le changer. Mot de passe : 8 caractères au moins. L'e-mail reste privé et sert à retrouver le compte si vous oubliez le mot de passe. ⇒ The username is your public identifier: 3 to 16 characters (letters without accents, digits, underscore), permanent. Your display name will be the same, and you can change it. Password: at least 8 characters. Your email stays private and is used to recover the account if you forget the password.
+Mot de passe changé. ⇒ Password changed.
+E-mail ou mot de passe incorrect. ⇒ Incorrect email or password.
+Cet e-mail est déjà utilisé. ⇒ This email is already in use.
+Adresse e-mail invalide. ⇒ Invalid email address.
+Mot de passe trop court (8 caractères au moins). ⇒ Password too short (at least 8 characters).
+Ce compte est désactivé. ⇒ This account is disabled.
+Trop d'essais. Réessayez dans quelques minutes. ⇒ Too many attempts. Try again in a few minutes.
+La connexion par e-mail n'est pas activée pour ce jeu. ⇒ Email sign-in is not enabled for this game.
+Profil introuvable pour ce compte. ⇒ No profile found for this account.
+Nom d'utilisateur invalide (3 à 16 caractères, lettres sans accent, chiffres ou tiret bas). ⇒ Invalid username (3 to 16 characters, letters without accents, digits or underscore).
+Ce nom d'utilisateur n'est pas accepté. ⇒ This username is not allowed.
+Vous devez accepter les conditions pour créer un compte. ⇒ You must accept the terms to create an account.
+Ce nom d'utilisateur est déjà pris. ⇒ This username is already taken.
+Le nom d'affichage ne peut pas être vide. ⇒ The display name cannot be empty.
+Ce nom d'affichage n'est pas accepté. ⇒ This display name is not allowed.
+Mot de passe actuel incorrect. ⇒ Current password is incorrect.
+Le nom d'utilisateur saisi ne correspond pas. ⇒ The username you typed does not match.

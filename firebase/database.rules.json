@@ -1,0 +1,46 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "usernames": {
+      "$name": {
+        ".read": true,
+        ".write": "auth != null && ((!data.exists() && newData.val() === auth.uid && !root.child('users').child(auth.uid).child('username').exists()) || (data.val() === auth.uid && !newData.exists()))",
+        ".validate": "newData.isString() && $name.matches(/^[a-z0-9_]{3,16}$/)"
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['username', 'displayName', 'xp', 'stats'])",
+        "username": {
+          ".validate": "newData.isString() && root.child('usernames').child(newData.val()).val() === auth.uid"
+        },
+        "displayName": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16"
+        },
+        "created": {
+          ".validate": "newData.isNumber()"
+        },
+        "xp": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && (data.exists() ? (newData.val() >= data.val() && newData.val() <= data.val() + 2500) : newData.val() === 0)"
+        },
+        "stats": {
+          "$k": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          }
+        },
+        "recent": {
+          ".validate": "newData.hasChildren()"
+        },
+        "arsenal": {
+          ".validate": "newData.isString() && newData.val().length < 60000"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    }
+  }
+}
