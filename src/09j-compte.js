@@ -1,8 +1,8 @@
 /* ==========================================================================
    COMPTES ET PROGRESSION
-   Le serveur (api/, fonctions Vercel + base Postgres) tient les comptes : nom d'utilisateur unique (l'identifiant public, fixe),
-   nom d'affichage modifiable, mot de passe et code de secours (hachés), niveau et statistiques. Aucune adresse e-mail ni autre donnée
-   qui identifie la personne : le code de secours, montré une seule fois, est le seul moyen de retrouver un mot de passe oublié.
+   Firebase (09ja-firebase.js : Authentication et Realtime Database) tient les comptes : nom d'utilisateur unique (l'identifiant public, fixe),
+   nom d'affichage modifiable, e-mail et mot de passe (gérés par Firebase Authentication), niveau et statistiques. L'e-mail reste privé et
+   sert à retrouver ou changer le mot de passe (le message est envoyé par Firebase).
    Ce fichier est la partie du jeu :
    - connexion (nom d'utilisateur), création de compte (ouvert aussitôt), mot de passe oublié (nom, code de secours, nouveau mot de passe) ;
    - écran du code de secours (acctShowCode) : à l'inscription, à la première connexion d'un compte qui n'en avait pas, après une
@@ -30,20 +30,13 @@ function acctHintSet(h) { try { if (h) localStorage.setItem(ACCT_KEY, JSON.strin
 
 /* Appel de l'API : { ok, status, data } ; jamais d'exception (réseau coupé : status 0) */
 async function acctApi(name, body, ms = 12000) {
-  if (location.protocol === 'file:') return { ok: false, status: 0, data: null };
-  const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), ms);
-  try {
-    const r = await fetch('/api/' + name, {
-      method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', signal: ctl.signal,
-      headers: body === undefined ? { 'X-Lang': LANG } : { 'Content-Type': 'application/json', 'X-Lang': LANG }, body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    let data = null; try { data = await r.json(); } catch (e) { /* réponse sans corps */ }
-    return { ok: r.ok, status: r.status, data };
-  } catch (e) { return { ok: false, status: 0, data: null }; } finally { clearTimeout(to); }
+  if (location.protocol === 'file:' || !FB.db) return { ok: false, status: 0, data: null }; // page ouverte depuis un fichier, ou base Firebase pas encore configurée
+  if (!hasKey(FB_ROUTES, name)) return { ok: false, status: 501, data: { error: _t('Cette fonction n\x27est pas encore disponible.') } };
+  try { return await FB_ROUTES[name](body || {}, ms); } catch (e) { return { ok: false, status: 0, data: null }; }
 }
 function acctApply(d) {
   ACCT.user = d.user || null; ACCT.level = d.level || null; ACCT.stats = d.stats || null; ACCT.recent = d.recent || [];
-  if (ACCT.user) acctHintSet({ u: ACCT.user.username, n: ACCT.user.displayName, l: ACCT.level ? ACCT.level.level : 1, a: ACCT.user.avatar || 0, on: true });
+  if (ACCT.user) acctHintSet({ u: ACCT.user.username, n: ACCT.user.displayName, l: ACCT.level ? ACCT.level.level : 1, a: ACCT.user.avatar || 0, e: ACCT.user.email || '', on: true });
   if (ACCT.user && ARS.synced !== ACCT.user.username) { ARS.synced = ACCT.user.username; arsSync(); } // progression des armes du compte, une fois par connexion
 }
 function acctForget() { ACCT.user = null; ACCT.level = null; ACCT.stats = null; ACCT.recent = []; ACCT.view = 'login'; }
@@ -56,7 +49,7 @@ async function acctLoad() {
     ACCT.state = 'ready'; acctApply(r.data);
     if (!ACCT.user && h) { // plus de session : on garde son nom sous la main, et on lui dit pourquoi
       if (h.on) { acctHintSet({ ...h, on: false }); if (!ACCT.note) ACCT.note = _t('Votre session a expiré. Reconnectez-vous.'); }
-      if (!ACCT.draft.u) ACCT.draft = { ...ACCT.draft, u: h.u };
+      if (!ACCT.draft.u) ACCT.draft = { ...ACCT.draft, u: h.e || '' };
     }
   } else if (ACCT.state !== 'ready') { ACCT.state = 'off'; ACCT.user = null; } // (déjà connecté et serveur injoignable un instant : on garde ce que l'on sait)
   acctChanged();
@@ -104,7 +97,7 @@ function acctOnlineOk() { return ACCT.state === 'off' || !!ACCT.user; }
 /* Barre le salon à qui n'est pas connecté ; le pseudo en ligne est celui du compte */
 function acctSyncMulti() {
   const nm = $('netName');
-  if (nm) { nm.readOnly = !!ACCT.user; nm.title = ACCT.user ? _t('Votre nom d\u0027affichage (à changer dans Profil)') : ''; if (ACCT.user) nm.value = ACCT.user.displayName; }
+  if (nm) { nm.readOnly = !!ACCT.user; nm.title = ACCT.user ? _t('Votre nom d\x27affichage (à changer dans Profil)') : ''; if (ACCT.user) nm.value = ACCT.user.displayName; }
 }
 /* Appelé avant de créer ou de rejoindre un salon : renvoie false (et ouvre le Profil) si la connexion manque */
 function acctGate(code) {
@@ -131,7 +124,7 @@ function acctRender() {
   $('scr-profile').classList.toggle('ac-coding', !!ACCT.code); // écran du code : pas de bouton Retour (voir uiBack)
   if (ACCT.state === 'init') { sub.textContent = _t('Compte et progression'); body.innerHTML = _t('<p class="hint">Chargement du profil...</p>'); return; }
   if (ACCT.state === 'off') {
-    sub.textContent = _t('Comptes indisponibles'); body.innerHTML = _t('<div class="card"><p class="hint">Les comptes ne sont pas joignables depuis cette page (page ouverte depuis un fichier, ou serveur injoignable). Vous pouvez jouer sans compte. La progression n\u0027est pas enregistrée.</p><button class="btn" id="acRetry" type="button">Réessayer</button></div>');
+    sub.textContent = _t('Comptes indisponibles'); body.innerHTML = _t('<div class="card"><p class="hint">Les comptes ne sont pas joignables depuis cette page (page ouverte depuis un fichier, ou serveur injoignable). Vous pouvez jouer sans compte. La progression n\x27est pas enregistrée.</p><button class="btn" id="acRetry" type="button">Réessayer</button></div>');
     $('acRetry').addEventListener('click', async () => { await acctLoad(); acctRender(); });
     return;
   }
@@ -155,11 +148,11 @@ function acctFail(r, id = 'acErr') {
 function acctGo(view, extra = {}) { ACCT.view = view; ACCT.err = ''; Object.assign(ACCT, extra); acctRender(); sfxUi('click'); }
 /* Case des conditions : les liens ouvrent les textes sans perdre la saisie */
 function acctAcceptHtml(checked) {
-  return `<label class="ac-check"><input type="checkbox" name="accept"${checked ? ' checked' : ''} required><span>${_t('J\u0027ai 15 ans au moins et j\u0027accepte les')} <button class="link" type="button" data-legal="terms">${_t('conditions d\u0027utilisation')}</button> ${_t('et la')} <button class="link" type="button" data-legal="privacy">${_t('politique de confidentialité')}</button>.</span></label>`;
+  return `<label class="ac-check"><input type="checkbox" name="accept"${checked ? ' checked' : ''} required><span>${_t('J\x27ai 15 ans au moins et j\x27accepte les')} <button class="link" type="button" data-legal="terms">${_t('conditions d\x27utilisation')}</button> ${_t('et la')} <button class="link" type="button" data-legal="privacy">${_t('politique de confidentialité')}</button>.</span></label>`;
 }
 function acctLegalLinks(body, form) {
   for (const b of body.querySelectorAll('[data-legal]')) b.addEventListener('click', () => {
-    if (form) { const fd = new FormData(form); ACCT.draft = { u: fd.get('u') || '', a: !!fd.get('accept') }; }
+    if (form) { const fd = new FormData(form); ACCT.draft = { u: fd.get('u') || '', e: fd.get('e') || '', a: !!fd.get('accept') }; }
     legalGo(b.dataset.legal);
   });
 }
@@ -169,24 +162,22 @@ function acctRenderAuth(body, sub) {
   const v = ACCT.view, d = ACCT.draft || {};
   const note = ACCT.note ? `<p class="ac-note" role="status">${esc(ACCT.note)}</p>` : '';
   const side = `<div class="card"><h3 class="lbl">${_t('Pourquoi un compte ?')}</h3>
-      <p class="hint">${_t('Votre niveau, votre expérience et vos statistiques vous suivent d\u0027un appareil à l\u0027autre. Le multijoueur demande un compte. Le Solo se joue sans, mais rien n\u0027y est enregistré.')}</p>
-      <p class="hint">${_t('Aucune adresse e-mail. Un nom d\u0027utilisateur et un mot de passe suffisent. Les autres joueurs connectés voient votre nom d\u0027utilisateur, votre nom d\u0027affichage, votre niveau, vos statistiques et votre photo. Évitez d\u0027y mettre votre vrai nom.')} <button class="link" type="button" data-legal="privacy">${_t('Politique de confidentialité')}</button></p></div>`;
+      <p class="hint">${_t('Votre niveau, votre expérience et vos statistiques vous suivent d\x27un appareil à l\x27autre. Le multijoueur demande un compte. Le Solo se joue sans, mais rien n\x27y est enregistré.')}</p>
+      <p class="hint">${_t('Un e-mail et un mot de passe suffisent. L\x27e-mail reste privé et sert à retrouver votre mot de passe. Les autres joueurs connectés voient votre nom d\x27utilisateur, votre nom d\x27affichage, votre niveau, vos statistiques et votre photo. Évitez d\x27y mettre votre vrai nom.')} <button class="link" type="button" data-legal="privacy">${_t('Politique de confidentialité')}</button></p></div>`;
   const tabs = _t('<div class="seg" id="acTabs" role="radiogroup" aria-label="Connexion ou création de compte"></div>');
   if (v === 'recover') {
     sub.textContent = _t('Mot de passe oublié');
     body.innerHTML = `<div class="ac-grid"><div class="card ac-form"><h3 class="lbl">${_t('Mot de passe oublié')}</h3>${note}
-      <form><label class="ac-in"><span>${_t('Nom d\u0027utilisateur')}</span><input name="u" maxlength="16" autocomplete="username" autocapitalize="off" spellcheck="false" value="${esc(d.u || '')}" required></label>
-        <label class="ac-in"><span>${_t('Code de secours')}</span><input class="ac-codein" name="c" maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" required></label>
-        <label class="ac-in"><span>${_t('Nouveau mot de passe')}</span><input name="p" type="password" maxlength="128" autocomplete="new-password" required></label>
-        <p class="hint">${_t('Le code de secours s\u0027affiche à la création du compte. Sans lui, un mot de passe oublié ne peut pas être retrouvé. Le jeu ne garde aucune adresse e-mail. Vos autres appareils seront déconnectés.')}</p>
-        <p class="ac-err" id="acErr" role="alert">${esc(ACCT.err)}</p><button class="btn primary" type="submit">${_t('Changer le mot de passe')}</button></form>
+      <form><label class="ac-in"><span>${_t('E-mail')}</span><input name="u" type="email" maxlength="128" autocomplete="email" autocapitalize="off" spellcheck="false" value="${esc(d.u || '')}" required></label>
+        <p class="hint">${_t('Entrez l\x27e-mail de votre compte. Vous recevrez un message avec un lien pour choisir un nouveau mot de passe.')}</p>
+        <p class="ac-err" id="acErr" role="alert">${esc(ACCT.err)}</p><button class="btn primary" type="submit">${_t('Envoyer le lien')}</button></form>
       <div class="btns"><button class="btn" id="acBack" type="button">${_t('Retour')}</button></div></div>${side}</div>`;
     $('acBack').addEventListener('click', () => acctGo('login'));
     acctForm(body.querySelector('form'), async (fd) => {
-      const r = await acctApi('password-recover', { username: String(fd.get('u')).trim(), code: String(fd.get('c')), password: String(fd.get('p')) });
+      const r = await acctApi('password-reset', { email: String(fd.get('u')).trim() });
       if (!r.ok) return acctFail(r);
-      ACCT.draft = {}; ACCT.view = 'login'; acctApply(r.data); sfxUi('confirm');
-      acctShowCode(r.data.recoveryCode, _t('Mot de passe changé. Votre ancien code de secours ne sert plus. Voici le nouveau.'), acctSalonGo);
+      ACCT.draft = {}; sfxUi('confirm');
+      acctGo('login', { note: _t('Si un compte existe avec cet e-mail, un message avec un lien vient d\x27être envoyé. Pensez à regarder dans les courriers indésirables.') });
     });
     acctLegalLinks(body, null); return;
   }
@@ -195,10 +186,11 @@ function acctRenderAuth(body, sub) {
   body.innerHTML = `<div class="ac-grid">
     <div class="card ac-form">${tabs}${note}
       <form>
-        <label class="ac-in"><span>${_t('Nom d\u0027utilisateur')}</span><input name="u" maxlength="${reg ? 16 : 64}" autocomplete="username" autocapitalize="off" spellcheck="false" value="${esc(d.u || '')}" required></label>
+        <label class="ac-in"><span>${reg ? _t('Nom d\x27utilisateur') : _t('E-mail')}</span><input name="u"${reg ? '' : ' type="email"'} maxlength="${reg ? 16 : 128}" autocomplete="${reg ? 'username' : 'email'}" autocapitalize="off" spellcheck="false" value="${esc(d.u || '')}" required></label>
+        ${reg ? `<label class="ac-in"><span>${_t('E-mail')}</span><input name="e" type="email" maxlength="128" autocomplete="email" autocapitalize="off" spellcheck="false" value="${esc(d.e || '')}" required></label>` : ''}
         <label class="ac-in"><span>${_t('Mot de passe')}</span><input name="p" type="password" maxlength="128" autocomplete="${reg ? 'new-password' : 'current-password'}" required></label>
         ${reg ? acctAcceptHtml(d.a) : ''}
-        <p class="hint">${reg ? _t('Le nom d\u0027utilisateur est votre identifiant public : 3 à 16 caractères (lettres sans accent, chiffres, tiret bas), définitif. Votre nom d\u0027affichage sera le même, et vous pourrez le changer. Mot de passe : 8 caractères au moins. Aucune adresse e-mail n\u0027est demandée : un code de secours s\u0027affichera, à noter pour retrouver le compte si vous oubliez le mot de passe.') : _t('<button class="link" type="button" id="acForgot">Mot de passe oublié ?</button>')}</p>
+        <p class="hint">${reg ? _t('Le nom d\x27utilisateur est votre identifiant public : 3 à 16 caractères (lettres sans accent, chiffres, tiret bas), définitif. Votre nom d\x27affichage sera le même, et vous pourrez le changer. Mot de passe : 8 caractères au moins. L\x27e-mail reste privé et sert à retrouver le compte si vous oubliez le mot de passe.') : _t('<button class="link" type="button" id="acForgot">Mot de passe oublié ?</button>')}</p>
         <p class="ac-err" id="acErr" role="alert">${esc(ACCT.err)}</p>
         <button class="btn primary" type="submit">${reg ? _t('Créer le compte') : _t('Se connecter')}</button>
       </form>
@@ -210,7 +202,7 @@ function acctRenderAuth(body, sub) {
   acctForm(form, async (fd) => {
     const u = String(fd.get('u')).trim();
     if (reg) {
-      const r = await acctApi('register', { username: u, password: String(fd.get('p')), accept: !!fd.get('accept') });
+      const r = await acctApi('register', { username: u, email: String(fd.get('e') || '').trim(), password: String(fd.get('p')), accept: !!fd.get('accept') });
       if (!r.ok) return acctFail(r);
       ACCT.draft = {}; acctApply(r.data); sfxUi('confirm');
       acctShowCode(r.data.recoveryCode, _t('Compte créé : bienvenue !'), acctSalonGo);
@@ -220,7 +212,7 @@ function acctRenderAuth(body, sub) {
     if (!r.ok) return acctFail(r);
     ACCT.note = ''; ACCT.draft = {}; acctApply(r.data); sfxUi('confirm');
     // compte créé avant les codes de secours : le serveur vient de lui en donner un
-    if (r.data.recoveryCode) return acctShowCode(r.data.recoveryCode, _t('Votre compte n\u0027avait pas encore de code de secours. Le voici. Il remplace l\u0027adresse e-mail, que le jeu ne garde plus.'), acctSalonGo);
+    if (r.data.recoveryCode) return acctShowCode(r.data.recoveryCode, _t('Votre compte n\x27avait pas encore de code de secours. Le voici. Il remplace l\x27adresse e-mail, que le jeu ne garde plus.'), acctSalonGo);
     acctChanged(); acctSalonGo();
   });
 }
@@ -239,11 +231,11 @@ function acctRenderCode(body, sub) {
   sub.textContent = _t('Code de secours');
   body.innerHTML = `<div class="card ac-form ac-codebox">${ACCT.codeNote ? `<p class="ac-note">${esc(ACCT.codeNote)}</p>` : ''}
       <h3 class="lbl">${_t('Votre code de secours')}</h3>
-      <p class="hint">${_t('Notez-le et gardez-le en lieu sûr. C\u0027est le seul moyen de retrouver votre compte si vous oubliez votre mot de passe. Il ne sera plus affiché.')}</p>
+      <p class="hint">${_t('Notez-le et gardez-le en lieu sûr. C\x27est le seul moyen de retrouver votre compte si vous oubliez votre mot de passe. Il ne sera plus affiché.')}</p>
       <p class="ac-code" id="acCode">${esc(ACCT.code)}</p>
       <div class="row"><button class="btn" id="acCodeCopy" type="button">${_t('Copier')}</button><button class="btn" id="acCodeSave" type="button">${_t('Enregistrer dans un fichier')}</button></div>
       <p class="ac-err ok" id="acCodeMsg" role="status"></p>
-      <form><label class="ac-check"><input type="checkbox" name="k" required><span>${_t('J\u0027ai noté mon code de secours')}</span></label>
+      <form><label class="ac-check"><input type="checkbox" name="k" required><span>${_t('J\x27ai noté mon code de secours')}</span></label>
         <button class="btn primary" type="submit">${_t('Continuer')}</button></form></div>`;
   const msg = (t) => { const m = $('acCodeMsg'); if (m) m.textContent = t; };
   $('acCodeCopy').addEventListener('click', async () => {
@@ -256,8 +248,8 @@ function acctRenderCode(body, sub) {
   $('acCodeSave').addEventListener('click', () => {
     sfxUi('click');
     const u = ACCT.user ? ACCT.user.username : '';
-    const txt = ['Riposte: Frontline', _t('Nom d\u0027utilisateur : {0}', u), _t('Code de secours : {0}', ACCT.code), _t('Donné le {0}', fmtDate(new Date(), { day: 'numeric', month: 'long', year: 'numeric' })), '',
-      _t('Il sert à choisir un nouveau mot de passe si vous oubliez le vôtre (Connexion, "Mot de passe oublié ?"). Il ne sert qu\u0027une fois. Un nouveau code vous est alors donné.')].join('\n');
+    const txt = ['Riposte: Frontline', _t('Nom d\x27utilisateur : {0}', u), _t('Code de secours : {0}', ACCT.code), _t('Donné le {0}', fmtDate(new Date(), { day: 'numeric', month: 'long', year: 'numeric' })), '',
+      _t('Il sert à choisir un nouveau mot de passe si vous oubliez le vôtre (Connexion, "Mot de passe oublié ?"). Il ne sert qu\x27une fois. Un nouveau code vous est alors donné.')].join('\n');
     const url = URL.createObjectURL(new Blob([txt + '\n'], { type: 'text/plain;charset=utf-8' })), a = document.createElement('a');
     a.href = url; a.download = _t('riposte-frontline-code-de-secours.txt'); document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
     msg(_t('Téléchargement demandé : vérifiez que le fichier est bien enregistré, sinon copiez le code ou notez-le à la main.'));
@@ -319,30 +311,28 @@ function acctRenderProfile(body, sub) {
             <div class="ac-xp">${_t('{0} · {1} XP en tout', L.need ? `${_t('{0} / {1} XP avant le niveau {2}', L.into, L.need, L.level + 1)}` : _t('Niveau maximal'), L.xp)}</div></div>
         </div>
         ${acctStatsHtml(S, true)}
-        <div class="card ac-games"><h3 class="lbl">${_t('Dernières parties')}</h3>${games || _t('<p class="hint">Aucune partie enregistrée. Jouez une partie pour gagner de l\u0027XP.</p>')}</div>
+        <div class="card ac-games"><h3 class="lbl">${_t('Dernières parties')}</h3>${games || _t('<p class="hint">Aucune partie enregistrée. Jouez une partie pour gagner de l\x27XP.</p>')}</div>
       </div>
       <div class="card ac-side"><h3 class="lbl">${_t('Compte')}</h3>
         <div class="ac-field"><span>${_t('Photo de profil')}</span>
           <div class="row"><button class="btn" id="acAvEdit" type="button">${_t('Changer la photo')}</button>${u.avatar ? `<button class="btn" id="acAvDel" type="button">${_t('Retirer')}</button>` : ''}</div>
           ${u.avatar && u.avatarHidden ? `<p class="hint ac-hid">${_t('Votre photo a été signalée par plusieurs joueurs. Elle est masquée aux autres en attendant la modération.')}</p>` : ''}</div>
-        <form id="acName" class="ac-field"><label for="acNameIn">${_t('Nom d\u0027affichage (16 caractères au plus)')}</label>
+        <form id="acName" class="ac-field"><label for="acNameIn">${_t('Nom d\x27affichage (16 caractères au plus)')}</label>
           <div class="row"><input id="acNameIn" name="n" maxlength="16" value="${esc(u.displayName)}" autocomplete="off" spellcheck="false" required><button class="btn" type="submit">${_t('Enregistrer')}</button></div>
           <p class="ac-err" id="acErr" role="alert">${esc(ACCT.err)}</p></form>
-        <p class="hint">${_t('Identifiant :')} <b>${esc(u.username)}</b> ${_t('(définitif, visible dans le classement). Les autres joueurs voient aussi votre nom d\u0027affichage.')}</p>
+        <p class="hint">${_t('Identifiant :')} <b>${esc(u.username)}</b> ${_t('(définitif, visible dans le classement). Les autres joueurs voient aussi votre nom d\x27affichage.')}</p>
         <div class="btns"><button class="btn" id="acOut" type="button">${_t('Se déconnecter')}</button></div>
-        <details class="ac-fold"><summary>${_t('Mot de passe et code de secours')}</summary>
-          <form id="acPass"><span class="hint">${u.hasPassword ? _t('Changer le mot de passe (un nouveau code de secours vous sera donné)') : _t('Ajouter un mot de passe')}</span>
+        <details class="ac-fold"><summary>${_t('Mot de passe')}</summary>
+          <form id="acPass"><span class="hint">${u.hasPassword ? _t('Changer le mot de passe') : _t('Ajouter un mot de passe')}</span>
             ${u.hasPassword ? acctIn(_t('Mot de passe actuel'), 'name="c" type="password" maxlength="128" autocomplete="current-password" required') : ''}
             ${acctIn(_t('Nouveau mot de passe (8 caractères au moins)'), 'name="n" type="password" maxlength="128" autocomplete="new-password" required')}
             <p class="ac-err" id="acPassErr" role="alert"></p><button class="btn" type="submit">${_t('Enregistrer')}</button></form>
-          ${u.hasRecovery ? `<form id="acRec"><span class="hint">${_t('Nouveau code de secours (code perdu). L\u0027ancien ne servira plus.')}</span>${pwIn}
-            <p class="ac-err" id="acRecErr" role="alert"></p><button class="btn" type="submit">${_t('Créer un nouveau code')}</button></form>` : ''}
         </details>
         <details class="ac-fold ac-danger"><summary>${_t('Mes données et suppression du compte')}</summary>
           <p class="hint">${_t('Vous pouvez récupérer toutes vos données dans un fichier, ou supprimer le compte.')} <button class="link" type="button" data-legal="privacy">${_t('Politique de confidentialité')}</button></p>
           <div class="btns"><button class="btn" id="acExport" type="button">${_t('Télécharger mes données')}</button></div>
-          <form id="acDel"><p class="hint">${_t('Supprimer efface le compte, la progression et l\u0027historique, définitivement. Tapez votre nom d\u0027utilisateur{0} pour confirmer.', u.hasPassword ? ' ' + _t('et votre mot de passe') : '')}</p>
-            ${acctIn(_t('Nom d\u0027utilisateur'), `name="c" placeholder="${esc(u.username)}" autocomplete="off" autocapitalize="off" spellcheck="false" required`)}${u.hasPassword ? acctIn(_t('Mot de passe'), 'name="p" type="password" autocomplete="current-password" required') : ''}
+          <form id="acDel"><p class="hint">${_t('Supprimer efface le compte, la progression et l\x27historique, définitivement. Tapez votre nom d\x27utilisateur{0} pour confirmer.', u.hasPassword ? ' ' + _t('et votre mot de passe') : '')}</p>
+            ${acctIn(_t('Nom d\x27utilisateur'), `name="c" placeholder="${esc(u.username)}" autocomplete="off" autocapitalize="off" spellcheck="false" required`)}${u.hasPassword ? acctIn(_t('Mot de passe'), 'name="p" type="password" autocomplete="current-password" required') : ''}
             <p class="ac-err" id="acDelErr" role="alert"></p><button class="btn danger" type="submit">${_t('Supprimer définitivement')}</button></form></details>
       </div>
     </div>`;
@@ -363,17 +353,17 @@ function acctRenderProfile(body, sub) {
     try { const r = await call(new FormData(f)); if (!r.ok) $(errId).textContent = (r.data && r.data.error) || AC_ERR[r.status] || _t('Erreur.'); else done(r); }
     finally { ACCT.busy = false; btn.disabled = false; }
   });
-  wire('acPass', 'acPassErr', (fd) => acctApi('password-change', { current: String(fd.get('c') || ''), next: String(fd.get('n')) }), (r) => { acctApply(r.data); sfxUi('confirm'); acctShowCode(r.data.recoveryCode, _t('Mot de passe changé. Votre ancien code de secours ne sert plus. Voici le nouveau.')); });
+  wire('acPass', 'acPassErr', (fd) => acctApi('password-change', { current: String(fd.get('c') || ''), next: String(fd.get('n')) }), (r) => { acctApply(r.data); sfxUi('confirm'); acctShowCode(r.data.recoveryCode, _t('Mot de passe changé.')); });
   // code de secours : le premier (bandeau) ou un nouveau à la place d'un code perdu ; le serveur redemande le mot de passe
   const recNew = (fd) => acctApi('recovery-new', { password: String(fd.get('p') || '') });
   if ($('acRec0')) wire('acRec0', 'acRec0Err', recNew, (r) => { acctApply(r.data); sfxUi('confirm'); acctShowCode(r.data.recoveryCode, _t('Votre code de secours est prêt.')); });
-  if ($('acRec')) wire('acRec', 'acRecErr', recNew, (r) => { acctApply(r.data); sfxUi('confirm'); acctShowCode(r.data.recoveryCode, _t('Nouveau code de secours. L\u0027ancien ne sert plus.')); });
+  if ($('acRec')) wire('acRec', 'acRecErr', recNew, (r) => { acctApply(r.data); sfxUi('confirm'); acctShowCode(r.data.recoveryCode, _t('Nouveau code de secours. L\x27ancien ne sert plus.')); });
   $('acOut').addEventListener('click', async () => { await acctApi('logout', {}); const h = acctHint(); if (h) acctHintSet({ ...h, on: false }); acctForget(); acctChanged(); sfxUi('back'); });
   $('acExport').addEventListener('click', async () => {
     try {
-      const r = await fetch('/api/account-export', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      if (!r.ok) throw new Error();
-      const url = URL.createObjectURL(await r.blob()), a = document.createElement('a'); a.href = url; a.download = 'riposte-frontline-mes-donnees.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+      const blob = await fbExport();
+      if (!blob) throw new Error();
+      const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = 'riposte-frontline-mes-donnees.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (e) { ACCT.err = _t('Export impossible : réessayez.'); $('acErr').textContent = ACCT.err; }
   });
   $('acDel').addEventListener('submit', async (e) => {
@@ -403,7 +393,7 @@ async function acctMatchEnd(result, show) {
       const g = ARS.gain, a = g ? pxpForLevel(g.level) : 0, b = g && g.level < 100 ? pxpForLevel(g.level + 1) : 0;
       const slots = g && g.slots ? `<b>${_tn(g.slots, '{0} classe personnalisée débloquée', '{0} classes personnalisées débloquées')}</b>` : '';
       box.innerHTML = (g ? endXpHtml({ xp: g.xp, level: g.level, into: ARS.px - a, need: b ? b - a : 0, up: g.up, notes: [_t('Progression gardée sur cet appareil'), slots] }) : '')
-        + (ACCT.state === 'ready' ? `<p class="ex-note">${_t('Partie non enregistrée. <b>Connectez-vous</b> (Profil) pour gagner de l\u0027XP du compte.')}</p>` : '');
+        + (ACCT.state === 'ready' ? `<p class="ex-note">${_t('Partie non enregistrée. <b>Connectez-vous</b> (Profil) pour gagner de l\x27XP du compte.')}</p>` : '');
       box.classList.toggle('hidden', !box.innerHTML);
     }
     return;
@@ -441,7 +431,7 @@ function acctArrive() {
   ACCT.ready.then(() => {
     if (ACCT.state !== 'ready') return;
     if (old) {
-      ACCT.note = _t('Ce lien reçu par e-mail ne sert plus. Le jeu ne garde plus d\u0027adresse e-mail. Connectez-vous avec votre nom d\u0027utilisateur. En cas d\u0027oubli du mot de passe, utilisez votre code de secours.');
+      ACCT.note = _t('Ce lien reçu par e-mail ne sert plus. Le jeu ne garde plus d\x27adresse e-mail. Connectez-vous avec votre nom d\x27utilisateur. En cas d\x27oubli du mot de passe, utilisez votre code de secours.');
       acctChanged(); uiOpen('profile', ['main']); return;
     }
     // compte resté connecté sans code de secours noté (créé avant les codes, ou code jamais confirmé) : le Profil, et son bandeau qui le
