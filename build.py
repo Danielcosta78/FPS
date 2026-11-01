@@ -136,7 +136,7 @@ print("illustrations des cartes :",", ".join(f"{k} ({os.path.getsize('dist/'+v)/
 en_dict,en_errs=i18n.load_en()
 if en_errs: raise SystemExit("i18n/en.txt :\n  "+"\n  ".join(en_errs))
 print("dictionnaire anglais :",len(en_dict),"entrées")
-for mark,val in (("/*__I18N_EN__*/ {}",json.dumps(en_dict,ensure_ascii=False,separators=(",",":")).replace("<","\\u003c")),("/*__TEX_PACKS__*/ {}",json.dumps(packs)),("/*__SFX_PACKS__*/ {}",json.dumps(sfx)),("/*__MAP_ART__*/ {}",json.dumps(art))):
+for mark,val in (("/*__I18N_EN__*/ {}",json.dumps(en_dict,ensure_ascii=False,separators=(",",":")).replace("<","\\x3c")),("/*__TEX_PACKS__*/ {}",json.dumps(packs)),("/*__SFX_PACKS__*/ {}",json.dumps(sfx)),("/*__MAP_ART__*/ {}",json.dumps(art))):
     if js.count(mark)!=1: raise SystemExit("marqueur introuvable ou en double dans src/ : "+mark)
     js=js.replace(mark,val)
 # Syntaxe du script assemblé (node --check) : une erreur de syntaxe passait sans bruit, et la page restait blanche au chargement (les outils
@@ -184,7 +184,7 @@ html=html.replace("__SITE__",SITE).replace("__APERCU__",apercu)
 for k in ("maskable-192","maskable-512"):
     if k not in icons: raise SystemExit("icône manquante : assets/icon/"+k+".png")
 json.dump({"id":"/","name":"Riposte: Frontline","short_name":"Riposte","description":"FPS en ligne dans le navigateur : solo contre des bots ou en ligne entre amis.",
-    "start_url":"./","scope":"./","display":"fullscreen","display_override":["fullscreen","standalone"],"orientation":"landscape","categories":["games"],
+    "start_url":"riposte-frontline.html","scope":"./","display":"fullscreen","display_override":["fullscreen","standalone"],"orientation":"landscape","categories":["games"],
     "background_color":"#0E110D","theme_color":"#0E110D","prefer_related_applications":False,
     "icons":[{"src":icons["icon-192"],"sizes":"192x192","type":"image/png","purpose":"any"},{"src":icons["icon-512"],"sizes":"512x512","type":"image/png","purpose":"any"},
              {"src":icons["maskable-192"],"sizes":"192x192","type":"image/png","purpose":"maskable"},{"src":icons["maskable-512"],"sizes":"512x512","type":"image/png","purpose":"maskable"}]},
@@ -220,7 +220,7 @@ for i,e in enumerate(log):
         if c.get("t") not in ("new","improved","fixed") or not str(c.get("x","")).strip(): raise SystemExit(f"changelog.json : changement invalide pour {e['version']} (t : new, improved ou fixed)")
         if not str(c.get("x_en","")).strip(): raise SystemExit(f"changelog.json : texte anglais (x_en) manquant pour {e['version']}")
     if i and vkey(log[i-1]["version"])<=vkey(e["version"]): raise SystemExit(f"changelog.json : versions à ranger de la plus récente à la plus ancienne ({e['version']})")
-html=html.replace("__CHANGELOG__",json.dumps(log,ensure_ascii=False,separators=(",",":")).replace("<","\\u003c"))
+html=html.replace("__CHANGELOG__",json.dumps(log,ensure_ascii=False,separators=(",",":")).replace("<","\\x3c"))
 print("version :",log[0]["version"])
 # Référencement (README « Référencement ») : la fiche structurée de shell.html doit rester un JSON valide (sinon les moteurs l'ignorent
 # sans rien dire) ; robots.txt et sitemap.xml sont servis tels quels (exclus de la réécriture vers la page dans vercel.json).
@@ -253,6 +253,7 @@ if relay:
     host=re.match(r"wss?://([^/]+)",relay).group(1); net="https://"+host+" wss://"+host
     peer=""
 else: net="https://*.peerjs.com wss://*.peerjs.com stun: turn:"; peer=" https://cdn.jsdelivr.net/npm/peerjs@1.5.5/"
+net+=" https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.firebaseio.com https://*.firebasedatabase.app" # Firebase (src/09ja-firebase.js) : comptes et progression
 csp=("default-src 'self'; script-src 'self' "+sha+peer+"; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
      "font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' "+net+"; "
      "manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'")
@@ -306,7 +307,7 @@ def serveur_de_jeu():
     print("serveur de jeu : version",srv_ver,"(dist/serveur/, serveur/installer.sh,",len(inst.encode())//1024,"Ko)")
     if len(inst.encode())>32*1024: raise SystemExit("serveur/installer.sh dépasse 32 Ko, la taille maximale du champ « Cloud config » de Hetzner")
 if os.path.isdir("serveur"): serveur_de_jeu()
-bad=[(i+1) for i,l in enumerate(html.split("\n")) if re.search("[\u2013\u2014\u2015]",l)]
+bad=[(i+1) for i,l in enumerate(html.split("\n")) if re.search("["+chr(0x2013)+chr(0x2014)+chr(0x2015)+"]",l)]
 if "[Nom ou raison sociale" in html: print("ATTENTION : mentions légales à compléter (src/09k-legal.js : LEGAL.name, address, email) avant la mise en production")
 print("taille",len(html),"lignes avec tirets interdits:",bad)
 # style des textes vus par le joueur (tools/dev/check_texte.py, README « Style des textes ») : le build échoue au moindre écart
