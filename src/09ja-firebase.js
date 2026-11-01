@@ -82,8 +82,8 @@ function fbMsg(r) {
     WEAK_PASSWORD: _t('Mot de passe trop court (8 caractères au moins).'),
     INVALID_LOGIN_CREDENTIALS: wrong, INVALID_PASSWORD: wrong, EMAIL_NOT_FOUND: wrong,
     USER_DISABLED: _t('Ce compte est désactivé.'),
-    TOO_MANY_ATTEMPTS_TRY_LATER: _t('Trop d'essais. Réessayez dans quelques minutes.'),
-    OPERATION_NOT_ALLOWED: _t('La connexion par e-mail n'est pas activée pour ce jeu.'),
+    TOO_MANY_ATTEMPTS_TRY_LATER: _t('Trop d\x27essais. Réessayez dans quelques minutes.'),
+    OPERATION_NOT_ALLOWED: _t('La connexion par e-mail n\x27est pas activée pour ce jeu.'),
   };
   return hasKey(T, code) ? T[code] : _t('Une erreur est survenue.');
 }
@@ -127,20 +127,20 @@ async function fbMe() {
 }
 async function fbRegister(b) {
   const name = String(b.username || '').trim().toLowerCase(), mail = String(b.email || '').trim(), pw = String(b.password || '');
-  if (!/^[a-z0-9_]{3,16}$/.test(name)) return fbBad(_t('Nom d'utilisateur invalide (3 à 16 caractères, lettres sans accent, chiffres ou tiret bas).'));
-  if (filtreNom(name)) return fbBad(_t('Ce nom d'utilisateur n'est pas accepté.'));
+  if (!/^[a-z0-9_]{3,16}$/.test(name)) return fbBad(_t('Nom d\x27utilisateur invalide (3 à 16 caractères, lettres sans accent, chiffres ou tiret bas).'));
+  if (filtreNom(name)) return fbBad(_t('Ce nom d\x27utilisateur n\x27est pas accepté.'));
   if (!FB_MAIL.test(mail)) return fbBad(_t('Adresse e-mail invalide.'));
   if (pw.length < 8) return fbBad(_t('Mot de passe trop court (8 caractères au moins).'));
   if (!b.accept) return fbBad(_t('Vous devez accepter les conditions pour créer un compte.'));
   const free = await fbDb('usernames/' + name, 'GET');
   if (free.status === 0) return fbOff();
-  if (free.ok && free.data !== null) return fbBad(_t('Ce nom d'utilisateur est déjà pris.'));
+  if (free.ok && free.data !== null) return fbBad(_t('Ce nom d\x27utilisateur est déjà pris.'));
   const a = await fbAuth('signUp', { email: mail, password: pw, returnSecureToken: true });
   if (!a.ok) return fbFail(a);
   const s = fbSessFrom(a.data, mail); fbSessSet(s);
   const undo = async () => { await fbAuth('delete', { idToken: s.id }); fbSessSet(null); }; // le compte Firebase ne reste pas sans profil
   const c = await fbDb('usernames/' + name, 'PUT', s.id, s.uid); // réserve le nom : refusé s'il vient d'être pris
-  if (!c.ok) { await undo(); return c.status === 0 ? fbOff() : fbBad(_t('Ce nom d'utilisateur est déjà pris.')); }
+  if (!c.ok) { await undo(); return c.status === 0 ? fbOff() : fbBad(_t('Ce nom d\x27utilisateur est déjà pris.')); }
   const p = { username: name, displayName: name, created: Date.now(), xp: 0, stats: fbStats(null) };
   const w = await fbDb('users/' + s.uid, 'PUT', s.id, p);
   if (!w.ok) { await fbDb('usernames/' + name, 'DELETE', s.id); await undo(); return w.status === 0 ? fbOff() : fbFail(w); }
@@ -159,9 +159,9 @@ async function fbLogin(b) {
 async function fbLogout() { fbSessSet(null); return fbOk({}); }
 function fbProfile(b) {
   return fbWith(async (s, tok) => {
-    const n = String(b.displayName || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 16);
-    if (!n) return fbBad(_t('Le nom d'affichage ne peut pas être vide.'));
-    if (filtreNom(n)) return fbBad(_t('Ce nom d'affichage n'est pas accepté.'));
+    const n = String(b.displayName || '').replace(/[\x00-\x1f<>]/g, '').trim().slice(0, 16);
+    if (!n) return fbBad(_t('Le nom d\x27affichage ne peut pas être vide.'));
+    if (filtreNom(n)) return fbBad(_t('Ce nom d\x27affichage n\x27est pas accepté.'));
     const w = await fbDb('users/' + s.uid, 'PATCH', tok, { displayName: n });
     if (!w.ok) return fbFail(w);
     return fbLoad(s, tok);
@@ -193,7 +193,7 @@ async function fbAccountDelete(b) {
   const m = await fbWith((s, tok) => fbLoad(s, tok));
   if (!m.ok) return m;
   const s = fbSess(), name = m.data.user.username;
-  if (String(b.confirm || '').trim().toLowerCase() !== name) return fbBad(_t('Le nom d'utilisateur saisi ne correspond pas.'));
+  if (String(b.confirm || '').trim().toLowerCase() !== name) return fbBad(_t('Le nom d\x27utilisateur saisi ne correspond pas.'));
   const a = await fbAuth('signInWithPassword', { email: s.email, password: String(b.password || ''), returnSecureToken: true });
   if (!a.ok) return a.status === 0 ? fbOff() : fbBad(_t('Mot de passe actuel incorrect.'));
   const t = a.data.idToken;
